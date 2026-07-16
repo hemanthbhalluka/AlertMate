@@ -6,12 +6,15 @@ import com.project.public_safety_app.model.User;
 import com.project.public_safety_app.repository.SelfAssessmentResultRepository;
 import com.project.public_safety_app.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.owasp.html.PolicyFactory;
+import org.owasp.html.Sanitizers;
 
-import java.util.List;
+import java.util.Optional;
 
 @Service
-public class SelfAssessmentResultServiceImpl implements SelfAssessmentResultService{
+public class SelfAssessmentResultServiceImpl implements SelfAssessmentResultService {
 
     @Autowired
     private SelfAssessmentResultRepository selfAssessmentResultRepository;
@@ -22,12 +25,19 @@ public class SelfAssessmentResultServiceImpl implements SelfAssessmentResultServ
     @Autowired
     private UserRepository userRepository;
 
+    private final PolicyFactory sanitizer = Sanitizers.FORMATTING.and(Sanitizers.LINKS);
+
     public SelfAssessmentResult createResult(SelfAssessmentResult result, User user) {
         validateSelfAssessmentResult(result);
 
         Quiz quiz = result.getQuiz();
         Quiz sanitizedQuiz = sanitizeQuiz(quiz);
         result.setQuiz(sanitizedQuiz);
+
+        // Sanitize comments before saving
+        if (result.getComments() != null) {
+            result.setComments(sanitizer.sanitize(result.getComments()));
+        }
 
         return selfAssessmentResultRepository.save(result);
     }
@@ -49,7 +59,7 @@ public class SelfAssessmentResultServiceImpl implements SelfAssessmentResultServ
             throw new IllegalArgumentException("Quiz cannot be null");
         }
 
-        // Add more field-specific validations as needed
+        // Additional validation for other fields can be added here
     }
 
     private Quiz sanitizeQuiz(Quiz quiz) {
@@ -60,13 +70,37 @@ public class SelfAssessmentResultServiceImpl implements SelfAssessmentResultServ
         sanitizedQuiz.setId(quiz.getId());
         sanitizedQuiz.setTitle(quiz.getTitle());
         sanitizedQuiz.setDescription(quiz.getDescription());
-        // Exclude or mask sensitive fields
         sanitizedQuiz.setSensitiveData(null); // Assuming sensitiveData is a field in Quiz
+
+        // Handle nested objects explicitly
+        if (quiz.getNestedObject() != null) {
+            sanitizedQuiz.setNestedObject(sanitizeNestedObject(quiz.getNestedObject()));
+        }
+
         return sanitizedQuiz;
     }
 
-    public void deleteResult(Long id) {
-        selfAssessmentResultRepository.deleteById(id);
+    private NestedObject sanitizeNestedObject(NestedObject nestedObject) {
+        if (nestedObject == null) {
+            return null;
+        }
+        NestedObject sanitizedNestedObject = new NestedObject();
+        sanitizedNestedObject.setField1(nestedObject.getField1());
+        sanitizedNestedObject.setField2(null); // Assuming field2 is sensitive
+        return sanitizedNestedObject;
     }
 
+    public void deleteResult(Long id, User requestingUser) {
+        Optional<SelfAssessmentResult> resultOptional = selfAssessmentResultRepository.findById(id);
+        if (resultOptional.isEmpty()) {
+            throw new IllegalArgumentException("Result not found");
+        }
+
+        SelfAssessmentResult result = resultOptional.get();
+        if (!result.getUser().getId().equals(requestingUser.getId())) {
+            throw new AccessDeniedException("You do not have permission to delete this result");
+        }
+
+        selfAssessmentResultRepository.deleteById(id);
+    }
 }
