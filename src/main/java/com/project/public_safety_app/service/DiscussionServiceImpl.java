@@ -1,6 +1,5 @@
 package com.project.public_safety_app.service;
 
-
 import com.project.public_safety_app.dto.CommentRequest;
 import com.project.public_safety_app.model.Comment;
 import com.project.public_safety_app.model.Discussion;
@@ -14,8 +13,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+
 @Service
-public class DiscussionServiceImpl implements DiscussionService{
+public class DiscussionServiceImpl implements DiscussionService {
 
     @Autowired
     private DiscussionRepository discussionRepository;
@@ -29,17 +29,7 @@ public class DiscussionServiceImpl implements DiscussionService{
     @Autowired
     private CommentRepository commentRepository;
 
-    public Discussion createDiscussion(Discussion discussion,User user) {
-
-//        User user1=EntityUtil.convertToEntity(userService.getUserByName(user.getUserName()));
-//        if(user1.getDiscussions()==null){
-//            user1.setDiscussions(new ArrayList<>(List.of(discussion)));
-//        }else{
-//            user1.getDiscussions().add(discussion);
-//        }
-//        userRepository.save(user1);
-//        discussion.setUser(user1);
-//        return discussionRepository.save(discussion);
+    public Discussion createDiscussion(Discussion discussion, User user) {
         discussion.setComments(null);
         User user1 = EntityUtil.convertToEntity(userService.getUserByName(user.getUserName()));
 
@@ -64,11 +54,14 @@ public class DiscussionServiceImpl implements DiscussionService{
     }
 
     public List<Discussion> getDiscussionsByUser(String userName) {
-        User user=userRepository.findByUserName(userName);
-        return user.getDiscussions(); // Custom method to be implemented
+        User user = userRepository.findByUserName(userName);
+        if (user == null) {
+            return List.of(); // Return an empty list if the user is not found
+        }
+        return user.getDiscussions(); // Return the discussions for the user
     }
 
-    public void deleteDiscussionByName(String userName,long id) {
+    public void deleteDiscussionByName(String userName, long id) {
         User user = userRepository.findByUserName(userName);
 
         if (user == null) {
@@ -85,18 +78,17 @@ public class DiscussionServiceImpl implements DiscussionService{
         user.getDiscussions().remove(discussion);
         userRepository.save(user);  // Save the updated user (if needed, depending on your cascading setup)
 
-        // Optionally, delete all comments associated with the discussion first
-//        commentRepository.deleteByDiscussionId(id);
-        for(Comment i:discussion.getComments()){
-            i.setDiscussion(null);
-            commentRepository.save(i);
+        // Delete all comments associated with the discussion
+        List<Comment> comments = discussion.getComments();
+        if (comments != null) {
+            for (Comment comment : comments) {
+                commentRepository.delete(comment);
+            }
         }
 
         // Delete the discussion
         discussionRepository.deleteById(id);
-
     }
-
 
     public Comment addComment(Long discussionId, CommentRequest commentRequest) {
         Discussion discussion = discussionRepository.findById(discussionId).orElse(null);
@@ -107,7 +99,6 @@ public class DiscussionServiceImpl implements DiscussionService{
         Comment comment = new Comment();
         comment.setDiscussion(discussion);
         comment.setContent(commentRequest.getContent());
-//        comment.setUserId(commentRequest.getUserId());
         commentRepository.save(comment);
 
         return comment;
@@ -149,5 +140,4 @@ public class DiscussionServiceImpl implements DiscussionService{
 
         return true;
     }
-
 }
